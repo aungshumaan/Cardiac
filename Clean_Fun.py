@@ -85,7 +85,7 @@ def remove_cardiac_unrelated(df):
         for i in ind_cardiac:
             print("Removing Cardiac Unrelated Row: "+str(i)+"\n")
             try:
-                print(df.iloc[i][['enrollId','patient_link','Enrollment_Date','status','patient_name','cardiac_related']])
+                print(df.iloc[i][['enrollId','patient_link','Enrollment_Date','status','name','cardiac_related']])
             except:
                 print(df.iloc[i][['enrollId','patient_link','cardiac_related']])
             print('-'*50)
@@ -321,14 +321,14 @@ def remove_invalid_rows(df):
     """
     # find the index of invalid rows
     ind_inv=df.loc[df['enrollId'].apply(lambda x: True if len(str(x))<5 else False)].index
-    ind_inv=ind_inv.append(df.loc[df['patient_name'].apply(lambda x: search_for_test(x,'test'))].index)
-    ind_inv=ind_inv.append(df.loc[df['patient_name'].apply(lambda x: search_for_test(x,'john doe'))].index)
+    ind_inv=ind_inv.append(df.loc[df['name'].apply(lambda x: search_for_test(x,'test'))].index)
+    ind_inv=ind_inv.append(df.loc[df['name'].apply(lambda x: search_for_test(x,'john doe'))].index)
     if len(ind_inv)!=0:
         # print and remove them
         for i in ind_inv:
             print("removing invalid row: "+str(i)+"\n")
             try:
-                print(df.iloc[i][['patient_link','enrollId','Enrollment_Date','patient_name','create_user']])
+                print(df.iloc[i][['patient_link','enrollId','Enrollment_Date','name','create_user']])
             except:
                 print(df.iloc[i]['enrollId'])
             print('-'*50)
@@ -339,12 +339,12 @@ def remove_invalid_rows(df):
 
     # Could remove this section since now we caught them with the 'test' search. But just in case
     # find observations from Test
-    ind_test=df.loc[df['create_user']=='multitechvisions@gmail.com'].index#[['patient_link','Enrollment_Date','patient_name','create_user']]
+    ind_test=df.loc[df['create_user']=='multitechvisions@gmail.com'].index#[['patient_link','Enrollment_Date','name','create_user']]
     if len(ind_test)!=0:
         df.iloc[ind_test]
         print("removing multitechvisions test rows: \n")
         try:
-            print(df.iloc[ind_test][['enrollId','patient_link','Enrollment_Date','patient_name','create_user']])
+            print(df.iloc[ind_test][['enrollId','patient_link','Enrollment_Date','name','create_user']])
         except:
             print(df.iloc[ind_test]['enrollId'])
         print('-'*50)
@@ -356,7 +356,7 @@ def remove_invalid_rows(df):
 # maybe there's an errors coerce function
 def search_for_test(x,search_word):
     """ Handles errors and search for 'test' in the input variable
-    Use as df.loc[df['patient_name'].apply(lambda x: search_for_test(x,'test'))]
+    Use as df.loc[df['name'].apply(lambda x: search_for_test(x,'test'))]
     """
     try:
         return re.search(search_word,x.lower())!= None

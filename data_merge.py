@@ -99,4 +99,5 @@ def sheet_merge(live_path, archive_path, live_sheet_pkl_path, archive_sheet_pkl_
             full_df = pd.merge(full_df, combined_df_dict[sheet_name], on='enrollId', how='inner')
             print('Merged sheet "{}" with the full dataframe and changed the row number by {}\n'.format(sheet_name, (len(full_df)-init_length)))
 
+    print('DATA MERGE IS COMPLETE')
     return full_df
