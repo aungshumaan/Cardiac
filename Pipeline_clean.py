@@ -5,7 +5,7 @@ from Clean_Fun import *
 
 # NOTE have to use remove_invalid_rows() inside ALex's function,
 # before we remove patient name
-
+impute_na=9999
 # %% Load dataset
 
 live_path='Data/Cardiac Program_M.xlsx'
@@ -13,12 +13,24 @@ archive_path='Data/Cardiac Program_Archive.xlsx'
 live_sheet_pkl='pickle_jar/live_sheets.pkl'
 archive_sheet_pkl='pickle_jar/archive_sheets.pkl'
 datecol_pkl='pickle_jar/datecols.pkl'
-df=pairwise_sheet_merge(live_path, archive_path,
+df_dict=pairwise_sheet_merge(live_path, archive_path,
     live_sheet_pkl, archive_sheet_pkl, datecol_pkl)
+df_dict.keys()
+for key in df_dict.keys():
+    print(key+":\n")
+    print(df_dict[key].columns)
+
 
 # %%
+
 from enrollId import *
-generateEnrollId(df['patient_enrollment_records'])
+id_periods=generateEnrollId(df_dict['patient_enrollment_records'])
+
+addEnrollId(df_dict['patient weights'], 'patient_weight_date', id_periods)
+addEnrollId(df_dict['patient BNP'], 'bnp_date', id_periods)
+addEnrollId(df_dict['Cardiac_Meds'], 'cardiac_meds_date', id_periods)
+addEnrollId(df_dict['patient labs'], 'labs_date', id_periods)
+addEnrollId(df_dict['patient BP'], 'bp_date', id_periods)
 
 # %% test patients, determing Response Value
 
@@ -55,6 +67,17 @@ med_aicd_clean(df,'anticoagulant', 0)
 med_aicd_clean(df,'ionotropes', 0)
 med_aicd_clean(df,'aicd', 0)
 
-weight_dur_age_clean(df,dur_na=-999999,age_na=-99.,weight_perc_cutoff=0.2)
+weight_dur_age_clean(df,dur_na=impute_na,age_na=impute_na,weight_perc_cutoff=0.2)
+# weight_dur_age_clean(df,dur_na=-999999,age_na=-99.,weight_perc_cutoff=0.2)
+# Fill all other NA values so that we can find them in a missingness matrix
+df.fillna(impute_na,inplace=True)
 
 # %%
+import matplotlib.pyplot as plt
+import seaborn as sns
+#%%
+plt.subplots(figsize=(20,15))
+heat=sns.heatmap(df[df==impute_na].notnull(), cbar=False)
+# plt.xticks(rotation=75)
+fig=heat.get_figure()
+fig.savefig('Figures/missingness.png',transparent=True, dpi=400,bbox_inches='tight' ,format='png')
