@@ -85,9 +85,9 @@ def remove_cardiac_unrelated(df):
         for i in ind_cardiac:
             print("Removing Cardiac Unrelated Row: "+str(i)+"\n")
             try:
-                print(df.iloc[i][['patient_link','Enrollment_Date','status','patient_name','cardiac_related']])
+                print(df.iloc[i][['enrollId','patient_link','Enrollment_Date','status','patient_name','cardiac_related']])
             except:
-                print(df.iloc[i][['patient_link','cardiac_related']])
+                print(df.iloc[i][['enrollId','patient_link','cardiac_related']])
             print('-'*50)
         # now remove them
         df.drop(ind_cardiac,axis=0,inplace=True)
@@ -114,19 +114,19 @@ def determine_outcome_train_test(df,outcome_dict={
     train={}
     for row in range(df.shape[0]):
         if df.iloc[row]['status'] in outcome_dict['Good']:
-            outcome[df.iloc[row]['patient_link']]=1
-            train[df.iloc[row]['patient_link']]=1
+            outcome[df.iloc[row]['enrollId']]=1
+            train[df.iloc[row]['enrollId']]=1
         if df.iloc[row]['status'] in outcome_dict['Bad']:
-            outcome[df.iloc[row]['patient_link']]=0
-            train[df.iloc[row]['patient_link']]=1
+            outcome[df.iloc[row]['enrollId']]=0
+            train[df.iloc[row]['enrollId']]=1
         if df.iloc[row]['status'] in outcome_dict['Test']:
-            train[df.iloc[row]['patient_link']]=0
+            train[df.iloc[row]['enrollId']]=0
         elif df.iloc[row]['discharge']==True:
-            train[df.iloc[row]['patient_link']]=1
+            train[df.iloc[row]['enrollId']]=1
         elif df.iloc[row]['discharge']==False:
-            train[df.iloc[row]['patient_link']]=0
-    df['outcome']=df['patient_link'].map(outcome)
-    df['train']=df['patient_link'].map(train)
+            train[df.iloc[row]['enrollId']]=0
+    df['outcome']=df['enrollId'].map(outcome)
+    df['train']=df['enrollId'].map(train)
     print("Successfully added two columns, Train, and Outcome")
     return df
 
@@ -136,20 +136,20 @@ def train_test_split_sg(df):
 
     if you haven't already run determine_outcome_train_test(df), will call it first
     """
-    try:
-        lost_df=df.loc[df.train.isnull()][['patient_link','date_of_birth','facilities_link','special_status','enrollment_date','discharge_date','status']]
-        print('{} patients dropped due to unknown outcome: \n'.format(lost_df.shape[0]))
-        print(lost_df.sample(10))
+    # try:
+    lost_df=df.loc[df.train.isnull()][['enrollId','patient_link','date_of_birth','facilities_link','special_status','enrollment_date','discharge_date','status']]
+    print('{} patients dropped due to unknown outcome: \n'.format(lost_df.shape[0]))
+    print(lost_df.shape[0])
 
-        train_ind=df.loc[df.train==1].index
-        train_df=df.iloc[train_ind].drop('train',axis=1)
-        train_df=train_df.reset_index().drop('index',axis=1)
-        test_ind=df.loc[df.train==0].index
-        test_df=df.iloc[test_ind].drop('train',axis=1).reset_index().drop('index',axis=1)
-        return train_df, test_df
-    except:
-        print("Calculating outcome first with determine_outcome_train_test()\n")
-        return train_test_split_sg(determine_outcome_train_test(df))
+    train_ind=df.loc[df.train==1].index
+    train_df=df.iloc[train_ind].drop('train',axis=1)
+    train_df=train_df.reset_index().drop('index',axis=1)
+    test_ind=df.loc[df.train==0].index
+    test_df=df.iloc[test_ind].drop('train',axis=1).reset_index().drop('index',axis=1)
+    return train_df, test_df
+    # except:
+        # print("Calculating outcome first with determine_outcome_train_test()\n")
+        # return train_test_split_sg(determine_outcome_train_test(df))
 
 def ef_deep_clean(x):
     """ helper function to clean_EF_rows
@@ -231,8 +231,8 @@ def choose_most_recent(df,date_col):
     To Do: make the drop duplicates more robust since misses some patients
     '''
     new_df=pd.DataFrame(columns=df.columns)
-    for pat in df.patient_link.unique():
-        pat_df=df.loc[df.patient_link==pat]
+    for pat in df.enrollId.unique():
+        pat_df=df.loc[df.enrollId==pat]
         rows,col =pat_df.shape
         if rows==1:
             tmp_df=pat_df
@@ -277,7 +277,7 @@ def dummify_diagnoses(df,unique_diag,diagnosis_col='diagnosis_1'):
     Use as: dummy_df_diag=dummify_diagnoses(df,uniq_diag)
 
     """
-    header=unique_diag.tolist().append('patient_link')
+    header=unique_diag.tolist().append('enrollId')
     dummy_diag=pd.DataFrame(columns=header)
 
     for row in range(df.shape[0]):
@@ -292,7 +292,7 @@ def dummify_diagnoses(df,unique_diag,diagnosis_col='diagnosis_1'):
             else:
                 continue
         tmp_dummy_diag=pd.DataFrame(dict_dummy_diag, index=[row])
-        tmp_dummy_diag['patient_link']=df.iloc[row]['patient_link']
+        tmp_dummy_diag['enrollId']=df.iloc[row]['enrollId']
         dummy_diag = pd.concat([dummy_diag,tmp_dummy_diag], axis=0)
 
     return dummy_diag
@@ -320,7 +320,7 @@ def remove_invalid_rows(df):
     Mutating function
     """
     # find the index of invalid rows
-    ind_inv=df.loc[df['patient_link'].apply(lambda x: True if len(str(x))<3 else False)].index
+    ind_inv=df.loc[df['enrollId'].apply(lambda x: True if len(str(x))<5 else False)].index
     ind_inv=ind_inv.append(df.loc[df['patient_name'].apply(lambda x: search_for_test(x,'test'))].index)
     ind_inv=ind_inv.append(df.loc[df['patient_name'].apply(lambda x: search_for_test(x,'john doe'))].index)
     if len(ind_inv)!=0:
@@ -328,9 +328,9 @@ def remove_invalid_rows(df):
         for i in ind_inv:
             print("removing invalid row: "+str(i)+"\n")
             try:
-                print(df.iloc[i][['patient_link','Enrollment_Date','patient_name','create_user']])
+                print(df.iloc[i][['patient_link','enrollId','Enrollment_Date','patient_name','create_user']])
             except:
-                print(df.iloc[i]['patient_link'])
+                print(df.iloc[i]['enrollId'])
             print('-'*50)
         # now remove them
         df.drop(ind_inv,axis=0,inplace=True)
@@ -344,9 +344,9 @@ def remove_invalid_rows(df):
         df.iloc[ind_test]
         print("removing multitechvisions test rows: \n")
         try:
-            print(df.iloc[ind_test][['patient_link','Enrollment_Date','patient_name','create_user']])
+            print(df.iloc[ind_test][['enrollId','patient_link','Enrollment_Date','patient_name','create_user']])
         except:
-            print(df.iloc[ind_test]['patient_link'])
+            print(df.iloc[ind_test]['enrollId'])
         print('-'*50)
         df.drop(ind_test,axis=0,inplace=True)
     print('\n \n Dropped '+str(len(ind_inv)+len(ind_test))+' rows from the dataset')
