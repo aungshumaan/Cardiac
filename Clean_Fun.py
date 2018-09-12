@@ -3,8 +3,47 @@
 import pandas as pd
 import numpy as np
 import re
+import datetime
+import xlrd
 
-def cleaning_func(df, var, impute):
+def weight_dur_age_clean(df,dur_na=-999999,age_na=-99.,weight_perc_cutoff=0.2):
+    """
+    This function adds duration and age columns and naively
+    cleans the weight_change_since_admit.
+    duration (type int, expressed in days) is difference of discharge_date and
+    admission_date if discharge is true, otherwise duration is time since admission_dateself.
+    age (type int, expressed in years) is deduced from birth date
+
+    If weight_change_since_admit/ weight < 0.2:
+    weight_change_since_admit (float, expressed in pounds) is divided by 10
+    otherwise it is unchanged.
+    Mutating function
+    Author: Aungshuman
+    """
+    ## duration
+    today = pd.to_datetime('today')
+    df.loc[df['discharge']==True,'duration'] = (pd.to_datetime(df.loc[df['discharge']==True, \
+        'discharge_date']) - pd.to_datetime(df.loc[df['discharge']==True,'enrollment_date']))
+    df.loc[df['discharge']==False,'duration'] = (today - \
+        pd.to_datetime(df.loc[df['discharge']==False,'enrollment_date']))
+    df.duration = df.duration.fillna(dur_na)
+    try:
+        df['duration'] = (df['duration'] / np.timedelta64(1, 'D')).astype(int)
+        df.loc[(df['duration']<1)&(df['duration']!=dur_na), 'duration']=dur_na
+    except:
+        print(df['duration'])
+    ##age
+    df['age'] = (today - pd.to_datetime(df['date_of_birth'])).apply(lambda x: \
+        float(x.days)/365).fillna(age_na).astype(int)
+    df.loc[(df.age<1)&(df.age!=age_na), 'age'] = age_na
+    ## weight_change_since_admit
+    df['weight_change_since_admit'] = np.where(abs(df['weight_change_since_admit']/ \
+        df['weight']) < weight_perc_cutoff, df['weight_change_since_admit'], df['weight_change_since_admit']/10)
+
+def med_aicd_clean(df, var, impute):
+    """ Mutating Function
+    Use as: med_aicd_clean(df,'ace', 0) for all medicines
+    """
     #lowercase all values
     df[var]=df[var].str.lower()
 
@@ -26,6 +65,7 @@ def cleaning_func(df, var, impute):
 
     #set all other values to 1
     allowed_vals=[0, impute]
+    print("Values set to 1.0: \n")
     print(df.loc[~df[var].isin(allowed_vals), var].tolist())
     df.loc[~df[var].isin(allowed_vals), var] = 1
 
@@ -33,7 +73,7 @@ def cleaning_func(df, var, impute):
 
     print(df[var].value_counts())
 
-    return df
+    # return df
 
 def remove_cardiac_unrelated(df):
     """ Remove rows that are not cardiac related
@@ -50,21 +90,26 @@ def remove_cardiac_unrelated(df):
                 print(df.iloc[i][['patient_link','cardiac_related']])
             print('-'*50)
         # now remove them
-        df.drop(ind_inv,axis=0,inplace=True)
+        df.drop(ind_cardiac,axis=0,inplace=True)
     # reset the index before moving on
     df=df.reset_index()
     print('\n \n Dropped '+str(len(ind_cardiac)+len(ind_cardiac))+' rows from the dataset')
     print('New size of dataset: '+str(df.shape))
-    return df
+    # return df
 
-def outcome_split(df,outcome_dict={
+def determine_outcome_train_test(df,outcome_dict={
     'Good':['To Home','No Reason Given','Assissted Living Facility','No Reason Given'], # CAN WE ASSUME THIS??? that In Nursing Facility
     'Bad':['Hospital','Death'],
     'Test':['In Nursing Facility','Skilled Nursing Facility (SNF)',
     'Not approriate for program, removed']}):
     """ Input dataframe and Outcome dictionary
     Adds Train and Outcome columns to dataframe
+    Mutating function
     """
+    #first do quick imputations to status
+    df.status=df.apply(lambda row: impute_from_special_status(
+        row['status'],row['special_status']),axis=1)
+
     outcome={}
     train={}
     for row in range(df.shape[0]):
@@ -82,8 +127,29 @@ def outcome_split(df,outcome_dict={
             train[df.iloc[row]['patient_link']]=0
     df['outcome']=df['patient_link'].map(outcome)
     df['train']=df['patient_link'].map(train)
+    print("Successfully added two columns, Train, and Outcome")
     return df
 
+def train_test_split_sg(df):
+    """
+    returns two datasets, train and test
+
+    if you haven't already run determine_outcome_train_test(df), will call it first
+    """
+    try:
+        lost_df=df.loc[df.train.isnull()][['patient_link','date_of_birth','facilities_link','special_status','enrollment_date','discharge_date','status']]
+        print('{} patients dropped due to unknown outcome: \n'.format(lost_df.shape[0]))
+        print(lost_df.sample(10))
+
+        train_ind=df.loc[df.train==1].index
+        train_df=df.iloc[train_ind].drop('train',axis=1)
+        train_df=train_df.reset_index().drop('index',axis=1)
+        test_ind=df.loc[df.train==0].index
+        test_df=df.iloc[test_ind].drop('train',axis=1).reset_index().drop('index',axis=1)
+        return train_df, test_df
+    except:
+        print("Calculating outcome first with determine_outcome_train_test()\n")
+        return train_test_split_sg(determine_outcome_train_test(df))
 
 def ef_deep_clean(x):
     """ helper function to clean_EF_rows
@@ -100,6 +166,7 @@ def ef_deep_clean(x):
     else: # Creates a list of digits
         tmp_dig=re.findall('\\b\\d+\\b', x)
         if len(tmp_dig)>2:
+            print("Couldn't extract EF so set to na_val")
             print(x)
             return clean_EF_rows('pending')
         if len(tmp_dig)==2:
@@ -155,6 +222,7 @@ def clean_diastolic_columns(di_sys,bp,col_type):
                 print("Error: please correct input variable col_type to be either 'di' or 'sys'")
         else:
             return di_sys
+        print("Imputing {},{} from Blood Pressure Column".format(sys_tmp,di_tmp))
     except:
         pass
 
@@ -186,6 +254,8 @@ def find_unique_diag(df_diag_column):
     """
     Within text Diagnosis Columns, returns a list of the Unique Diagnoses,
     removing the combinations of diagnoses
+    Use as: uniq_diag=find_unique_diag(df.Diagnosis_1)
+    and use this output within the dummify diagnoses function
     """
     all_diag=df_diag_column.apply(lambda x: lower_errors(x)).unique()
     all_diag[7].split(' , ')
@@ -199,11 +269,13 @@ def find_unique_diag(df_diag_column):
     unique_diag=pd.Series(flat_list).unique()
     return unique_diag
 
-def dummify_diagnoses(df,unique_diag,diagnosis_col='Diagnosis_1'):
+def dummify_diagnoses(df,unique_diag,diagnosis_col='diagnosis_1'):
     """
     Takes Diagnoses and dummifies them for patients. If a patient has multiple
     diagnoses, will put a 1 in all relevant Diagnoses.
     The kth column is NA, no diagnosis. Maybe we will impute with the mode?
+    Use as: dummy_df_diag=dummify_diagnoses(df,uniq_diag)
+
     """
     header=unique_diag.tolist().append('patient_link')
     dummy_diag=pd.DataFrame(columns=header)
@@ -232,6 +304,7 @@ def impute_from_special_status(status_row,special_row):
     try:
         if np.isnan(status_row):
             if special_row=='Death':
+                print('Added to status from special status')
                 return 'Death'
             else:
                 return status_row
@@ -244,6 +317,7 @@ def remove_invalid_rows(df):
     or a test patient created by multitechvisions
     Check patient name for TEST, or for John Doe and Sally Test
     Should drop row "create_user", afterwards
+    Mutating function
     """
     # find the index of invalid rows
     ind_inv=df.loc[df['patient_link'].apply(lambda x: True if len(str(x))<3 else False)].index
@@ -277,7 +351,7 @@ def remove_invalid_rows(df):
         df.drop(ind_test,axis=0,inplace=True)
     print('\n \n Dropped '+str(len(ind_inv)+len(ind_test))+' rows from the dataset')
     print('New size of dataset: '+str(df.shape))
-    return df
+    # return df
 
 # maybe there's an errors coerce function
 def search_for_test(x,search_word):
@@ -288,3 +362,44 @@ def search_for_test(x,search_word):
         return re.search(search_word,x.lower())!= None
     except:
         return False
+
+def datetime_fixer(date_list):
+    """
+    Converts a list (or Pandas Series) to datetime objects
+
+    Keyword Arguments
+    -----------------
+    date_list -- A list or Pandas Series containing date-like elements
+    """
+    # Checks if object is a Pandas Series and converts it to a list if true
+    if isinstance(date_list, pd.core.series.Series):
+        date_list = list(date_list)
+
+    nats_added = 0
+
+    for i in range(len(date_list)):
+        # If the date is not a datetime
+        if not isinstance(date_list[i], datetime.datetime):
+            # If this date is an int
+            if isinstance(date_list[i], int):
+                if date_list[i] > 1000:
+                    # Convert Excel style date to datetime
+                    date_list[i] = datetime.datetime(*xlrd.xldate_as_tuple(date_list[i], 0))
+                else:
+                    date_list[i] = np.datetime64('NaT')
+                    nats_added += 1
+            # If this date is a string
+            elif isinstance(date_list[i], str):
+                # Try to convert to datetime using this format
+                try:
+                    date_list[i] = datetime.strptime(date_list[i], '%m/%d/%Y')
+                    # If error, replace with NaT
+                except:
+                    date_list[i] = np.datetime64('NaT')
+                    nats_added += 1
+            else:
+                date_list[i] = np.datetime64('NaT')
+                nats_added += 1
+
+    print('{} NaT added to list'.format(nats_added))
+    return date_list
